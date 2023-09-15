@@ -17,16 +17,6 @@ class Job {
    * */
 
   static async create({ title, salary, equity, company_handle }) {
-    const duplicateCheck = await db.query(
-      `SELECT title
-           FROM jobs
-           WHERE title = $1`,
-      [title]
-    );
-
-    if (duplicateCheck.rows[0])
-      throw new BadRequestError(`Duplicate company: ${title}`);
-
     const result = await db.query(
       `INSERT INTO jobs
            (title, salary, equity, company_handle)
@@ -45,32 +35,33 @@ class Job {
    * Returns [{ id, title, salary, equity, company_handle }, ...]
    * */
 
-  static async findAll(searchFilter = []) {
-    let query = `SELECT id, title, salary, equity, company_handle
-                 FROM companies`;
+  static async findAll({ minSalary, hasEquity, title } = {}) {
+    let query = `SELECT j.id,
+                        j.title,
+                        j.salary,
+                        j.equity,
+                        j.company_handle AS "companyHandle",
+                        c.name AS "companyName"
+                  FROM jobs j
+                    LEFT JOIN companies AS c ON c.handle = j.company_handle`;
 
     let whereExpressions = [];
     let queryValues = [];
 
-    const { minSalary, hasEquity, title } = searchFilter;
-
-    if (minEmployees > maxEmployees) {
-      throw new BadRequestError("Min employees cannot be greater than max");
-    }
-
     // Add each possible search term to whereExpressions and queryValues
     // so we can generate right SQL.
 
-    if (minEmployees !== undefined) {
-      queryValues.push(minEmployees);
-      whereExpressions.push(`num_employees >= $${queryValues.length}`);
-    }
-    if (maxEmployees !== undefined) {
-      queryValues.push(maxEmployees);
-      whereExpressions.push(`num_employees <= $${queryValues.length}`);
+    if (minSalary !== undefined) {
+      queryValues.push(minSalary);
+      whereExpressions.push(`salary >= $${queryValues.length}`);
     }
 
-    if (title) {
+    if (hasEquity === true) {
+      queryValues.push(hasEquity);
+      whereExpressions.push(`equity > 0`);
+    }
+
+    if (title !== undefined) {
       queryValues.push(`%${title}%`);
       whereExpressions.push(`title ILIKE $${queryValues.length}`);
     }
@@ -82,35 +73,49 @@ class Job {
     // Finalize query and return results.
 
     query += " ORDER BY name";
-    const companiesRes = await db.query(query, queryValues);
-    return companiesRes.rows;
+    const jobRes = await db.query(query, queryValues);
+    return jobRes.rows;
   }
 
-  /** Given a company handle, return data about company.
+  /** Given a job id, return data about job.
    *
-   * Returns { handle, name, description, numEmployees, logoUrl, jobs }
-   *   where jobs is [{ id, title, salary, equity, companyHandle }, ...]
+   * Returns { id, title, salary, equity, companyHandles, company }
+   *   where company is { handle, name, description, numEmployees, logoUrl }
    *
    * Throws NotFoundError if not found.
    **/
 
-  static async get(handle) {
-    const companyRes = await db.query(
-      `SELECT handle,
-                  name,
-                  description,
-                  num_employees AS "numEmployees",
-                  logo_url AS "logoUrl"
-           FROM companies
-           WHERE handle = $1`,
-      [handle]
+  static async get(id) {
+    const jobRes = await db.query(
+      `SELECT id,
+              title,
+              salary,
+              equity,
+              company_handle AS "companyHandle"
+           FROM jobs
+           WHERE id = $1`,
+      [id]
     );
 
-    const company = companyRes.rows[0];
+    const job = jobRes.rows[0];
 
-    if (!company) throw new NotFoundError(`No company: ${handle}`);
+    if (!job) throw new NotFoundError(`No Job: ${id}`);
 
-    return company;
+    const companiesRes = await db.query(
+      `SELECT handle,
+              name,
+              description,
+              num_employees AS "numEmployees",
+              logo_url AS "logoUrl"
+        FROM companies
+        WHERE handle = $1`,
+      [job.companyHandle]
+    );
+
+    delete job.companyHandle;
+    job.company = companiesRes.rows[0];
+
+    return job;
   }
 
   /** Update company data with `data`.
