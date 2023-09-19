@@ -14,6 +14,7 @@ const {
   u1Token,
   u2Token,
   AdminToken,
+  testJobIds,
 } = require("./_testCommon");
 
 beforeAll(commonBeforeAll);
@@ -320,5 +321,16 @@ describe("DELETE /users/:username", function () {
       .delete(`/users/nope`)
       .set("authorization", `Bearer ${AdminToken}`);
     expect(resp.statusCode).toEqual(404);
+  });
+});
+
+/************************************** POST /users/:username/jobs/:id */
+
+describe("POST /users/:username/jobs/:id", function () {
+  test("works for admin", async function () {
+    const resp = await request(app)
+      .post(`/users/u1/jobs/${testJobIds[1]}`)
+      .set("authorization", `Bearer ${AdminToken}`);
+    expect(resp.body).toEqual({ applied: testJobIds[1] });
   });
 });
