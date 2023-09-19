@@ -136,7 +136,7 @@ router.delete(
  * Authorization required: admin or same-user-as-:username
  */
 router.post(
-  "/username/jobs/:id",
+  "/:username/jobs/:id",
   ensureCorrectUserOrAdmin,
   async (req, res, next) => {
     try {
